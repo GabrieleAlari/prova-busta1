@@ -3,354 +3,284 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>M. Studio — Premium Experience</title>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@200;300;400&display=swap" rel="stylesheet">
+<title>M. Studio — Ultra HD 3D Experience</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:#141210} /* Sfondo scuro per far risaltare il rendering premium */
-#stage{width:100%;height:100vh;position:relative;overflow:hidden}
-canvas#three{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
-#hint{position:absolute;bottom:8%;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;transition:opacity 0.8s cubic-bezier(0.25,1,0.5,1);display:flex;flex-direction:column;align-items:center;gap:12px;z-index:5}
-#hint-text{font-size:10px;letter-spacing:7px;text-transform:uppercase;color:#c9a96e;font-family:'Montserrat',sans-serif;font-weight:300}
-#hint-arrow{opacity:0.6;animation:bob 2.5s ease-in-out infinite}
-@keyframes bob{0%,100%{transform:translateY(0);opacity:0.4}50%{transform:translateY(8px);opacity:1}}
-.cur{width:8px;height:8px;border-radius:50%;background:#c9a96e;position:fixed;pointer-events:none;z-index:9999;transform:translate(-50%,-50%);mix-blend-mode:difference}
-.cur-ring{width:40px;height:40px;border-radius:50%;border:1px solid rgba(201,169,110,0.4);position:fixed;pointer-events:none;z-index:9998;transform:translate(-50%,-50%);transition:transform 0.2s cubic-bezier(0.1,0.8,0.3,1)}
-#overlay{position:absolute;inset:0;background:#141210;opacity:0;pointer-events:none;transition:opacity 1.2s ease}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body,html{width:100%;height:100%;overflow:hidden;background:#0d0b0a;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  #canvas-container{width:100%;height:100vh;position:relative}
+  canvas{width:100%;height:100%;display:block}
+  #ui-hint{position:absolute;bottom:10%;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;z-index:10;transition:opacity 0.6s ease}
+  .label{font-size:11px;letter-spacing:6px;text-transform:uppercase;color:#d4af37;opacity:0.8}
 </style>
 </head>
 <body>
-<div id="stage">
-  <canvas id="three"></canvas>
-  <div id="hint">
-    <div id="hint-text">Clicca per svelare</div>
-    <div id="hint-arrow"><svg width="16" height="22" viewBox="0 0 16 22" fill="none"><path d="M8 0v18M1 11l7 9 7-9" stroke="#c9a96e" stroke-width="0.8"/></svg></div>
-  </div>
-  <div id="overlay"></div>
-</div>
 
-<div class="cur" id="cur"></div>
-<div class="cur-ring" id="curRing"></div>
+<div id="canvas-container">
+  <canvas id="renderCanvas"></canvas>
+  <div id="ui-hint"><div class="label">Clicca per avviare il rendering animato</div></div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-/* CURSORE CUSTOM */
-const cur=document.getElementById('cur'),ring=document.getElementById('curRing');
-let mx=innerWidth/2,my=innerHeight/2,rx=mx,ry=my;
-document.addEventListener('mousemove',e=>{
-  mx=e.clientX;my=e.clientY;
-  cur.style.left=`${mx}px`;cur.style.top=`${my}px`;
-});
-(function raf(){
-  requestAnimationFrame(raf);
-  rx+=(mx-rx)*0.08;ry+=(my-ry)*0.08;
-  ring.style.left=`${rx}px`;ring.style.top=`${ry}px`;
-})();
+const container = document.getElementById('canvas-container');
+const canvas = document.getElementById('renderCanvas');
 
-/* ENGINE SETUP */
-const canvas=document.getElementById('three');
-const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:"high-performance"});
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-renderer.shadowMap.enabled=true;
-renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.15;
-renderer.setClearColor(0x141210,1);
+/* 1. SETUP DEL MOTORE DI RENDERING AVANZATO */
+const renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true, alpha: false, powerPreference: "high-performance"});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Ombre cinematiche morbide
+renderer.toneMapping = THREE.ACESFilmicToneMapping; // Profilo colore cinematografico da workstation 3D
+renderer.toneMappingExposure = 1.2;
 
-const scene=new THREE.Scene();
-scene.fog=new THREE.FogExp2(0x141210,0.04);
-const camera=new THREE.PerspectiveCamera(38,innerWidth/innerHeight,0.1,50);
-camera.position.set(0,0,6.5);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d0b0a);
+scene.fog = new THREE.FogExp2(0x0d0b0a, 0.05);
 
-function onResize(){
-  renderer.setSize(innerWidth,innerHeight);
-  camera.aspect=innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
+const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 0, 5.8);
+
+/* 2. GENERAZIONE HDRI PROCEDURALE (STUDIO MAP) */
+// Crea una mappa di riflessione per dare all'oro e alla ceralacca i riflessi tipici dei rendering offline
+function generateSpecularEnvMap() {
+  const size = 64;
+  const data = new Uint8Array(size * size * 3);
+  for (let i = 0; i < size; i++) {
+    for (let j = 0; j < size; j++) {
+      const idx = (i * size + j) * 3;
+      // Simula softbox da studio fotografico alto e laterale
+      const factor = Math.exp(-(Math.pow(i - size/3, 2) + Math.pow(j - size/2, 2)) / 300);
+      const val = Math.floor(factor * 255);
+      data[idx] = val + 20;     
+      data[idx+1] = val + 15;   
+      data[idx+2] = val + 10;   
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBFormat);
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  texture.needsUpdate = true;
+  return texture;
 }
-addEventListener('resize',onResize);onResize();
+const envMap = generateSpecularEnvMap();
 
-/* STUDIO LIGHTING CONFIGURATION (Luxury Studio Setup) */
-const ambLight=new THREE.AmbientLight(0xfff6ed,0.3);
-scene.add(ambLight);
+/* 3. SET LUCI FOTOGRAFICO A 4 PUNTI (Key, Fill, Rim, Floor Kick) */
+const ambientLight = new THREE.AmbientLight(0x221f1c, 0.8);
+scene.add(ambientLight);
 
-const keyLight=new THREE.DirectionalLight(0xfffbf5,4.0); // Luce radente per enfatizzare le texture
-keyLight.position.set(6,7,5);
-keyLight.castShadow=true;
-keyLight.shadow.mapSize.set(2048,2048);
-keyLight.shadow.bias=-0.0001;
-keyLight.shadow.radius=4;
+const keyLight = new THREE.DirectionalLight(0xfff6eb, 3.5);
+keyLight.position.set(5, 8, 4);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.width = 4096; // Risoluzione 4K per ombre nette senza aliasing
+keyLight.shadow.mapSize.height = 4096;
+keyLight.shadow.bias = -0.00005;
+keyLight.shadow.normalBias = 0.002;
+keyLight.shadow.radius = 3;
 scene.add(keyLight);
 
-const fillLight=new THREE.DirectionalLight(0xdbe7ff,1.5); // Luce fredda di riempimento dal lato opposto
-fillLight.position.set(-6,-2,3);
+const fillLight = new THREE.DirectionalLight(0xcce2ff, 1.2); // Contrasto freddo soft
+fillLight.position.set(-5, -2, 2);
 scene.add(fillLight);
 
-const rimLight=new THREE.DirectionalLight(0xffe2c4,2.0); // Controluce dorato sui bordi
-rimLight.position.set(0,-5,-3);
+const rimLight = new THREE.DirectionalLight(0xffffff, 2.5); // Accenta le silhouette dei bordi
+rimLight.position.set(0, -6, -4);
 scene.add(rimLight);
 
-const jewelryGlow=new THREE.PointLight(0xffdfa9,1.5,8); // Mette in risalto l'oro del sigillo
-jewelryGlow.position.set(0,0,1);
-scene.add(jewelryGlow);
-
-/* PROCEDURAL PREMIUM TEXTURES (Generazione grana fine della carta) */
-function createFinePaperTex(hexBg) {
-  const cv=document.createElement('canvas');cv.width=1024;cv.height=1024;
-  const cx=cv.getContext('2d');
-  const r=parseInt(hexBg.slice(1,3),16),g=parseInt(hexBg.slice(3,5),16),b=parseInt(hexBg.slice(5,7),16);
-  cx.fillStyle=hexBg;cx.fillRect(0,0,1024,1024);
-  
-  // Micro rumore
-  for(let i=0;i<90000;i++){
-    const x=Math.random()*1024,y=Math.random()*1024;
-    const noise=(Math.random()-.5)*12;
-    cx.fillStyle=`rgba(${Math.max(0,Math.min(255,r+noise))},${Math.max(0,Math.min(255,g+noise))},${Math.max(0,Math.min(255,b+noise))},0.09)`;
-    cx.fillRect(x,y,1.5,1.5);
+/* 4. TEXTURE AD ALTA RISOLUZIONE APERIODICHE PER LA CARTA */
+function generatePaperBump() {
+  const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#808080'; ctx.fillRect(0,0,512,512);
+  for(let i=0; i<60000; i++) {
+    const x = Math.random()*512, y = Math.random()*512;
+    const col = Math.floor(128 + (Math.random() - 0.5) * 25);
+    ctx.fillStyle = `rgb(${col},${col},${col})`;
+    ctx.fillRect(x, y, 1, 1);
   }
-  const t=new THREE.CanvasTexture(cv);
-  t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(1.5,1.5);
-  return t;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 2);
+  return tex;
 }
+const paperBump = generatePaperBump();
 
-const paperTexIvory = createFinePaperTex('#fcfaf2');
-const paperTexDark  = createFinePaperTex('#e5dec9');
-
-/* ADVANCED PHYSICAL MATERIALS (PBR MeshPhysicalMaterial) */
-const mPaperBody = new THREE.MeshPhysicalMaterial({
-  color:0xfcfaf2,roughness:0.92,metalness:0,map:paperTexIvory,clearcoat:0.0,bumpScale:0.005,side:THREE.DoubleSide
-});
-const mPaperInternal = new THREE.MeshPhysicalMaterial({
-  color:0xf3edd8,roughness:0.95,metalness:0,map:paperTexDark,side:THREE.DoubleSide
-});
-const mGoldPremium = new THREE.MeshPhysicalMaterial({
-  color:0xd4af37,roughness:0.25,metalness:0.94,clearcoat:0.3,clearcoatRoughness:0.1,envMapIntensity:2.0
-});
-const mWaxSeal = new THREE.MeshPhysicalMaterial({
-  color:0x7a1c1c,roughness:0.4,metalness:0.0,clearcoat:0.6,clearcoatRoughness:0.3,side:THREE.DoubleSide
-});
-const mLetterPaper = new THREE.MeshPhysicalMaterial({
-  color:0xffffff,roughness:0.88,metalness:0,clearcoat:0.0
+/* 5. MATERIALI ULTRA-REALISTICI FISICI (PBR) */
+const matEnvelopeOutside = new THREE.MeshPhysicalMaterial({
+  color: 0xfcfaf2, roughness: 0.85, metalness: 0, bumpMap: paperBump, bumpScale: 0.002,
+  clearcoat: 0.02, clearcoatRoughness: 0.5, side: THREE.FrontSide
 });
 
-/* ENVELOPE STRUCTURAL SETUP */
-const EW=3.0, EH=1.9, ED=0.07;
-const ehw=EW/2, ehh=EH/2;
-const envGroup=new THREE.Group();
-scene.add(envGroup);
+const matEnvelopeInside = new THREE.MeshPhysicalMaterial({
+  color: 0xeae2cb, roughness: 0.9, metalness: 0, bumpMap: paperBump, bumpScale: 0.003, side: THREE.BackSide
+});
 
-// Corpo Principale Busta
-const bodyGeo=new THREE.BoxGeometry(EW,EH,ED,4,4,1);
-const bodyMats=[mPaperInternal,mPaperInternal,mPaperInternal,mPaperInternal,mPaperBody,mPaperInternal];
-const body=new THREE.Mesh(bodyGeo,bodyMats);
-body.castShadow=true;body.receiveShadow=true;
-envGroup.add(body);
+const matGoldStamping = new THREE.MeshPhysicalMaterial({
+  color: 0xcaa64d, roughness: 0.18, metalness: 0.98, envMap: envMap, envMapIntensity: 2.5,
+  clearcoat: 0.2, clearcoatRoughness: 0.1
+});
 
-// Lembi Laterali Geometrici (Con spessore reale)
+const matWaxSeal = new THREE.MeshPhysicalMaterial({
+  color: 0x6e1616, roughness: 0.32, metalness: 0.05, envMap: envMap, envMapIntensity: 0.8,
+  clearcoat: 0.7, clearcoatRoughness: 0.2, transmission: 0.1, thickness: 0.5 // Simula la leggera traslucenza della cera
+});
+
+/* 6. COSTRUZIONE DELLA GEOMETRIA SENZA COMPRENSIONE DI PIANI (Zero Z-Fighting) */
+const EW = 2.6, EH = 1.7, ED = 0.04;
+const mainGroup = new THREE.Group();
+scene.add(mainGroup);
+
+// Corpo Posteriore e Spessore Interno
+const backGeo = new THREE.BoxGeometry(EW, EH, ED);
+const backMesh = new THREE.Mesh(backGeo, [matEnvelopeOutside, matEnvelopeOutside, matEnvelopeOutside, matEnvelopeOutside, matEnvelopeInside, matEnvelopeOutside]);
+backMesh.castShadow = true; backMesh.receiveShadow = true;
+mainGroup.add(backMesh);
+
+// Lembo Inferiore e Laterali Estrusi Fisicamente per evitare sovrapposizioni (Spessore strutturale 0.01 di distacco)
 function createSideFlap(isLeft) {
-  const s=isLeft?-1:1;
-  const shape=new THREE.Shape();
-  shape.moveTo(s*ehw,-ehh);shape.lineTo(s*ehw,ehh);shape.lineTo(0,ehh*0.02);shape.closePath();
-  const geo=new THREE.ExtrudeGeometry(shape,{depth:0.02,bevelEnabled:true,bevelSize:0.005,bevelThickness:0.005,bevelSegments:2});
-  const mesh=new THREE.Mesh(geo,mPaperInternal);
-  mesh.position.z=ED/2 - 0.01;
-  mesh.castShadow=true;
-  envGroup.add(mesh);
+  const s = isLeft ? -1 : 1;
+  const shape = new THREE.Shape();
+  shape.moveTo(s * (EW/2), -EH/2);
+  shape.lineTo(s * (EW/2), EH/2);
+  shape.lineTo(0, 0);
+  const extOpts = { depth: 0.01, bevelEnabled: true, bevelSize: 0.002, bevelThickness: 0.002, bevelSegments: 3 };
+  const geo = new THREE.ExtrudeGeometry(shape, extOpts);
+  const mesh = new THREE.Mesh(geo, matEnvelopeOutside);
+  mesh.position.z = ED/2 + 0.001; // Offset micrometrico controllato anti-bug
+  mesh.castShadow = true;
+  mainGroup.add(mesh);
 }
-createSideFlap(true);createSideFlap(false);
+createSideFlap(true); createSideFlap(false);
 
-// Lembo Inferiore
-const btmShape=new THREE.Shape();
-btmShape.moveTo(-ehw,-ehh);btmShape.lineTo(ehw,-ehh);btmShape.lineTo(0,ehh*0.1);btmShape.closePath();
-const btmGeo=new THREE.ExtrudeGeometry(btmShape,{depth:0.02,bevelEnabled:true,bevelSize:0.005,bevelThickness:0.005,bevelSegments:2});
-const btmFlap=new THREE.Mesh(btmGeo,mPaperInternal);
-btmFlap.position.z=ED/2 - 0.005;
-btmFlap.castShadow=true;
-envGroup.add(btmFlap);
+const botShape = new THREE.Shape();
+botShape.moveTo(-EW/2, -EH/2); botShape.lineTo(EW/2, -EH/2); botShape.lineTo(0, -EH*0.05);
+const botGeo = new THREE.ExtrudeGeometry(botShape, { depth: 0.01, bevelEnabled: true, bevelSize: 0.002, bevelThickness: 0.002, bevelSegments: 3 });
+const botMesh = new THREE.Mesh(botGeo, matEnvelopeOutside);
+botMesh.position.z = ED/2 + 0.003; // Layer superiore ai laterali
+botMesh.castShadow = true;
+mainGroup.add(botMesh);
 
-// Lembo Superiore Dinamico (Hinge Animation Group)
-const topFlapGroup=new THREE.Group();
-topFlapGroup.position.set(0,ehh,ED/2);
-envGroup.add(topFlapGroup);
+/* LEMBO SUPERIORE MORBIDO (Deformabile via Codice per evitare rigidità) */
+// Usiamo una PlaneGeometry densa di segmenti per poterla curvare matematicamente
+const topFlapSegmentsY = 30;
+const topFlapGeo = new THREE.PlaneGeometry(EW, EH/2 + 0.05, 20, topFlapSegmentsY);
+// Sposta il pivot geometrico sul bordo superiore della busta per una rotazione fisica corretta
+topFlapGeo.translate(0, -(EH/4), 0);
 
-const topShape=new THREE.Shape();
-topShape.moveTo(-ehw,0);topShape.lineTo(ehw,0);topShape.lineTo(0,-ehh*0.95);topShape.closePath();
-const topGeo=new THREE.ExtrudeGeometry(topShape,{depth:0.02,bevelEnabled:true,bevelSize:0.008,bevelThickness:0.008,bevelSegments:3});
-const topFlap=new THREE.Mesh(topGeo,mPaperBody);
-topFlap.position.z=-0.01;
-topFlap.castShadow=true;topFlap.receiveShadow=true;
-topFlapGroup.add(topFlap);
+const topFlapMesh = new THREE.Mesh(topFlapGeo, new THREE.MeshPhysicalMaterial({
+  color: 0xfcfaf2, roughness: 0.85, bumpMap: paperBump, bumpScale: 0.002, side: THREE.DoubleSide
+}));
+topFlapMesh.position.set(0, EH/2, ED/2 + 0.005);
+topFlapMesh.castShadow = true;
+mainGroup.add(topFlapMesh);
 
-/* LUXURY WAX SEAL (Lavorazione di Alto Livello) */
-const sealGroup=new THREE.Group();
-sealGroup.position.set(0,-ehh*0.45,0.015);
-topFlapGroup.add(sealGroup);
-
-const waxShape=new THREE.Shape();
-for(let i=0;i<=72;i++){
-  const a=i/72*Math.PI*2;
-  const r=0.23+Math.sin(a*8)*0.01+Math.cos(a*13)*0.007; // Irregolarità organica cera liquida
-  const x=Math.cos(a)*r,y=Math.sin(a)*r;
-  if(i===0)waxShape.moveTo(x,y);else waxShape.lineTo(x,y);
+// Salva la posizione originale dei vertici per calcolare la curvatura dinamica (Flessione della carta)
+const posAttr = topFlapGeo.attributes.position;
+const originalVertices = [];
+for (let i = 0; i < posAttr.count; i++) {
+  originalVertices.push(new THREE.Vector3(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i)));
 }
-waxShape.closePath();
-const waxGeo=new THREE.ExtrudeGeometry(waxShape,{depth:0.03,bevelEnabled:true,bevelSize:0.02,bevelThickness:0.02,bevelSegments:6});
-const waxMesh=new THREE.Mesh(waxGeo,mWaxSeal);
-waxMesh.position.z=-0.01;
-waxMesh.castShadow=true;
-sealGroup.add(waxMesh);
 
-// Monogramma "M" in Oro Goffrato Tridimensionale
-const monoGroup=new THREE.Group();
-monoGroup.position.set(0,0,0.03);
-sealGroup.add(monoGroup);
+/* SIGILLO DI CERA REALE (Forma Organica complessa ad alta densità) */
+const sealGroup = new THREE.Group();
+sealGroup.position.set(0, -EH/4, 0.02);
+topFlapMesh.add(sealGroup);
 
-function addGoldBar(w,h,d,x,y,rot=0){
-  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mGoldPremium);
-  m.position.set(x,y,d/2);m.rotation.z=rot;
-  monoGroup.add(m);
+const sealShape = new THREE.Shape();
+for(let i=0; i<=90; i++) {
+  const ang = (i/90) * Math.PI * 2;
+  const radius = 0.2 + Math.sin(ang * 9) * 0.012 + Math.cos(ang * 14) * 0.006; // Bordi irregolari della cera fusa pressata
+  const x = Math.cos(ang) * radius; const y = Math.sin(ang) * radius;
+  if(i===0) sealShape.moveTo(x,y); else sealShape.lineTo(x,y);
 }
-addGoldBar(0.025,0.14,0.015,-0.06,0); // Asta SX
-addGoldBar(0.025,0.14,0.015,0.06,0);  // Asta DX
-addGoldBar(0.02,0.08,0.015,-0.025,0.03,-0.55); // Diagonale SX
-addGoldBar(0.02,0.08,0.015,0.025,0.03,0.55);   // Diagonale DX
-addGoldBar(0.05,0.01,0.01,-0.06,-0.07); // Grazie inferiori
-addGoldBar(0.05,0.01,0.01,0.06,-0.07);
+const sealGeo = new THREE.ExtrudeGeometry(sealShape, {depth: 0.02, bevelEnabled: true, bevelSize: 0.015, bevelThickness: 0.015, bevelSegments: 5});
+const sealMesh = new THREE.Mesh(sealGeo, matWaxSeal);
+sealMesh.castShadow = true;
+sealGroup.add(sealMesh);
 
-/* LETTERA INTERNA (Minimal Elegant Card) */
-const letterGroup=new THREE.Group();
-letterGroup.position.set(0,0,0.005);
-envGroup.add(letterGroup);
+// Monogramma inciso internamente (Incastonato)
+const monoGeo = new THREE.BoxGeometry(0.12, 0.12, 0.01);
+const monoMesh = new THREE.Mesh(monoGeo, matGoldStamping);
+monoMesh.position.z = 0.025;
+sealGroup.add(monoMesh);
 
-const letterCard=new THREE.Mesh(new THREE.BoxGeometry(EW*0.9,EH*0.95,0.01),mLetterPaper);
-letterCard.castShadow=true;
-letterGroup.add(letterCard);
+/* LETTERA INTERNA RIGIDA PREMIUM */
+const letterGeo = new THREE.BoxGeometry(EW * 0.94, EH * 0.94, 0.015);
+const letterMesh = new THREE.Mesh(letterGeo, new THREE.MeshPhysicalMaterial({color: 0xffffff, roughness: 0.7, metalness: 0}));
+letterMesh.position.set(0, 0, 0);
+letterMesh.castShadow = true;
+mainGroup.add(letterMesh);
 
-// Righe della lettera incise in oro a caldo (Hot Stamping Foil Effect)
-for(let i=0;i<5;i++){
-  const y=-EH*0.2+i*EH*0.08;
-  const line=new THREE.Mesh(new THREE.BoxGeometry(EW*0.68,0.004,0.002),mPaperInternal);
-  line.position.set(0,y,0.006);
-  letterGroup.add(line);
+// Righe della lettera in foglia d'oro a rilievo
+const goldLineGeo = new THREE.BoxGeometry(EW*0.6, 0.01, 0.002);
+for(let i=0; i<4; i++) {
+  const gl = new THREE.Mesh(goldLineGeo, matGoldStamping);
+  gl.position.set(0, EH*0.2 - (i*0.15), 0.008);
+  letterMesh.add(gl);
 }
-const logoHeader=new THREE.Mesh(new THREE.BoxGeometry(EW*0.15,0.015,0.003),mGoldPremium);
-logoHeader.position.set(0,EH*0.3,0.006);
-letterGroup.add(logoHeader);
 
-/* CONTENITORE PARTICELLE (Pulviscolo Atmosferico di lusso) */
-const pCount=150;
-const pGeo=new THREE.BufferGeometry();
-const pPos=new Float32Array(pCount*3);
-for(let i=0;i<pCount*3;i+=3){
-  pPos[i]=(Math.random()-0.5)*10;
-  pPos[i+1]=(Math.random()-0.5)*6;
-  pPos[i+2]=(Math.random()-0.5)*5;
-}
-pGeo.setAttribute('position',new THREE.BufferAttribute(pPos,3));
-const pMat=new THREE.PointsMaterial({color:0xc9a96e,size:0.012,transparent:true,opacity:0.25});
-const dust=new THREE.Points(pGeo,pMat);
-scene.add(dust);
+/* 7. MACCHINA STATI DI RENDERING ED EASING CINEMATICI */
+let animationState = 'idle'; 
+let animationProgress = 0.0;
+let timeCounter = 0.0;
+const mouse = new THREE.Vector2();
 
-/* RAYCASTING PER CLICK AD ALTA PRECISIONE */
-const hitTarget=new THREE.Mesh(new THREE.BoxGeometry(EW+0.2,EH+0.2,0.5),new THREE.MeshBasicMaterial({visible:false}));
-scene.add(hitTarget);
+// Intercettore di click invisibile per evitare fallimenti di raycasting
+const interactionTarget = new THREE.Mesh(new THREE.BoxGeometry(EW*1.5, EH*1.5, 0.4), new THREE.MeshBasicMaterial({visible: false}));
+scene.add(interactionTarget);
 
-/* MACCHINA A STATI ED EASING INTERPOLATI (Fisica Organica) */
-let state='idle'; // idle -> opening -> extracting -> completed
-let progressAnim=0.0;
-let idleTimer=0.0;
-const mouse=new THREE.Vector2();
-const raycaster=new THREE.Raycaster();
-
-addEventListener('mousemove',e=>{
-  mouse.x=(e.clientX/innerWidth)*2-1;
-  mouse.y=-(e.clientY/innerHeight)*2+1;
+window.addEventListener('mousemove', (e) => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 });
 
-function triggersOpen(){
-  if(state!=='idle') return;
-  raycaster.setFromCamera(mouse,camera);
-  if(raycaster.intersectObject(hitTarget).length > 0){
-    state='opening';
-    document.getElementById('hint').style.opacity='0';
+function startAnimation() {
+  if (animationState !== 'idle') return;
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, camera);
+  if (raycaster.intersectObject(interactionTarget).length > 0) {
+    animationState = 'opening';
+    document.getElementById('ui-hint').style.opacity = '0';
   }
 }
-addEventListener('click',triggersOpen);
-addEventListener('touchstart',triggersOpen,{passive:true});
+window.addEventListener('click', startAnimation);
+window.addEventListener('touchstart', startAnimation, {passive: true});
 
-// Curve matematiche personalizzate per simulare rimbalzi elastici e strappi realistici
-function elasticOut(t) {
-  return Math.sin(-13 * Math.PI / 2 * (t + 1)) * Math.pow(2, -10 * t) + 1;
-}
-function cubicInOut(t) {
-  return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
-}
-
-let lastTime=performance.now();
-
-/* ANIMATION LOOP ENGINE */
-function animate(){
-  requestAnimationFrame(animate);
-  const now=performance.now();
-  const dt=Math.min((now-lastTime)/1000,0.05);
-  lastTime=now;
-  idleTimer+=dt;
-
-  // Movimento fluttuante iniziale molto smorzato ed elegante
-  if(state==='idle'){
-    envGroup.position.y=Math.sin(idleTimer*1.0)*0.04;
-    envGroup.rotation.y+=(mouse.x*0.12 - envGroup.rotation.y)*0.05;
-    envGroup.rotation.x+=(-mouse.y*0.08 - envGroup.rotation.x)*0.05;
+/* ANIMAZIONE PARABOLICA CON DEFORMAZIONE VERTEX DI FLESSIONE */
+function updateFlapDeformation(progress) {
+  // progress va da 0 (chiuso) a 1 (aperto a 180 gradi)
+  const currentAngle = progress * -Math.PI * 0.95; 
+  
+  const pos = topFlapGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const orig = originalVertices[i];
     
-    // Spostamento leggero della luce per riflessi d'oro sempre cangianti
-    jewelryGlow.position.x=Math.sin(idleTimer*1.5)*0.5;
-  }
-
-  // Micro movimenti pulviscolo sensibili al mouse
-  dust.rotation.y+=0.0005;
-  dust.position.x+=(mouse.x*0.05 - dust.position.x)*0.02;
-
-  /* CORE STATE MACHINE DELLA BUSTA */
-  if(state==='opening'){
-    progressAnim+=dt*1.1; // Velocità di sblocco della cera
+    // Calcola l'intensità di curvatura in base a quanto il vertice è lontano dal punto di ancoraggio (Y=0)
+    const distanceFactor = Math.abs(orig.y) / (EH / 2);
     
-    // Fase 1: Rotazione drammatica del lembo con rimbalzo elastico finale (Inerzia della carta pesante)
-    if(progressAnim<=1.0){
-      topFlapGroup.rotation.x=lerp(0,-Math.PI*0.82,elasticOut(progressAnim));
-    } else {
-      progressAnim=0.0;
-      state='extracting';
-    }
-  }
-  else if(state==='extracting'){
-    progressAnim+=dt*0.8; // Estrazione fluida
+    // Equazione di flessione parabolica della carta sotto sforzo d'apertura
+    const bendIntensity = Math.sin(progress * Math.PI) * 0.18; 
+    const localAngle = currentAngle * distanceFactor;
     
-    if(progressAnim<=1.0){
-      const easeVal=cubicInOut(progressAnim);
-      
-      // La lettera scivola verso l'alto ed esce dalla busta con asse Z ravvicinato
-      letterGroup.position.y=lerp(0,EH*1.15,easeVal);
-      letterGroup.position.z=lerp(0.005,0.3,easeVal);
-      
-      // La busta si allontana e scende dolcemente per dare profondità di campo
-      body.position.y=lerp(0,-0.6,easeVal);
-      body.position.z=lerp(0,-0.4,easeVal);
-      body.rotation.x=lerp(0,0.2,easeVal);
-      
-      // Regia Telecamera (Macro-zoom focalizzato sulla lettera)
-      camera.position.z=lerp(6.5,4.0,easeVal);
-      camera.position.y=lerp(0,EH*0.4,easeVal);
-    } else {
-      state='completed';
-      document.getElementById('overlay').style.opacity='1'; // Dissolvenza finale professionale opzionale
-    }
+    // Calcola la nuova coordinata deformata nello spazio della cerniera
+    const newY = orig.y * Math.cos(localAngle) - (bendIntensity * Math.pow(distanceFactor, 2));
+    const newZ = orig.y * Math.sin(localAngle) + (bendIntensity * Math.sin(localAngle));
+    
+    pos.setXYZ(i, orig.x, newY, newZ);
   }
-
-  renderer.render(scene,camera);
+  pos.needsUpdate = true;
+  topFlapGeo.computeVertexNormals(); // Ricalcola i riflessi della luce sulla superficie curva
 }
 
-function lerp(a,b,t){return a+(b-a)*t}
+const clock = new THREE.Clock();
 
-animate();
-</script>
-</body>
-</html>
+/* ENGINE ANIMATION LOOP */
+function renderLoop() {
+  requestAnimationFrame(renderLoop);
+  const delta = Math.min(clock.getDelta(), 0.03);
+  timeCounter += delta;
+
+  // Inertia tracking del mouse morbida per un look da cinepresa cinematografica
+  if (animationState === 'idle') {
+    mainGroup.rotation.y += (mouse.x * 0.15 - mainGroup.rotation.y) * 0.04;
+    mainGroup.rotation.x += (-mouse.y * 0.1 - mainGroup.rotation.x) * 0.04;
+    // Leggera fluttuazione casuale
